@@ -58,12 +58,14 @@ It saves `config.json` automatically.
    ```
    python presenter_app.py
    ```
-4. Now test, in this order:
+4. Now test, in this order. The app starts in **PEN OFF** (navigate) mode —
+   the green/red box in the camera window always shows the current mode:
    - **Swipe** open hand right → next slide
    - Slide 1: **point** with your index finger — cursor follows it onto A, B, C
-   - Slide 2: **pinch and move** — draw a circle around the buggy code line;
-     **fist** — your circle is erased
-   - Slide 3: pinch-write your name on the grid
+   - Slide 2: hold up **two fingers (peace sign) for half a second** → PEN ON;
+     **pinch and move** — circle the buggy code line; **fist** — erased
+   - **Two fingers 0.5s** again → PEN OFF → swipe to slide 3
+   - Slide 3: pen on, pinch-write your name, pen off
    - **Open palm 2s** — screen goes black; again — it comes back
    - **Q** in the camera window quits
 
@@ -80,6 +82,7 @@ It saves `config.json` automatically.
 | mediapipe install fails | Your Python is 3.13+ — install 3.12 |
 | Wrong camera opens | Run `check_camera.py`, set `CAMERA_INDEX` |
 | Pinch flickers / won't trigger | Re-run `--calibrate` in current lighting |
+| Stuck drawing red ink | Hold two fingers 0.5s → PEN OFF releases the marker instantly |
 | Swipes fire by accident | Re-calibrate with faster deliberate swipes (raises the threshold) |
 | Cursor jittery | More light on your hand; keep hand inside the yellow box |
 | Keys don't reach the browser | Click the slide page once before presenting |

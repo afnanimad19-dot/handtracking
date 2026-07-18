@@ -189,7 +189,7 @@ class GestureTracker:
             if dt > 0:
                 vx = (st.smooth_x - st.last_x) / dt  # frame-widths per second
                 st.last_vx = vx
-                if (st.fingers_up >= 4 and not st.pinching
+                if (st.fingers_up >= 3 and not st.pinching
                         and abs(vx) > self.swipe_speed
                         and now - st.last_swipe_t > SWIPE_COOLDOWN
                         and now - st.last_pinch_end_t > SWIPE_COOLDOWN):

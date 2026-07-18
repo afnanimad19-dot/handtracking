@@ -9,12 +9,19 @@ What it adds over demo_presenter.py:
   * On-screen gesture hint bar (clients trust what they can read)
   * PALM HOLD (open hand steady 2s) -> black screen toggle ('B' in PowerPoint)
 
-Gestures while presenting:
-  open-hand swipe   next / previous slide
-  point (1 finger)  pointer follows your finger
-  pinch + move      draw on the slide (PowerPoint: Ctrl+P once for pen mode)
-  fist              erase drawings ('E')
-  palm hold 2s      black screen on/off ('B')
+Two clear modes, toggled by holding up TWO FINGERS (peace sign) for half a
+second — a big indicator on screen shows which mode you're in:
+
+  PEN OFF (default — navigate):
+    open-hand swipe   next / previous slide
+    point (1 finger)  pointer follows your finger
+    pinch             does NOTHING (so you can't draw by accident)
+  PEN ON (annotate):
+    pinch + move      draw on the slide (PowerPoint: Ctrl+P once for pen mode)
+    fist              erase drawings ('E')
+    swiping           disabled (so you can't change slides mid-drawing)
+  Both modes:
+    palm hold 2s      black screen on/off ('B')
 
 Run:
   python presenter_app.py --calibrate    # first time in a new room
@@ -48,7 +55,11 @@ mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_styles = mp.solutions.drawing_styles
 
-HINTS = "SWIPE slides | POINT pointer | PINCH draw | FIST erase | PALM 2s black"
+HINTS_OFF = "SWIPE slides | POINT pointer | 2 FINGERS 0.5s = pen ON | PALM 2s black"
+HINTS_ON = "PINCH draw | FIST erase | 2 FINGERS 0.5s = pen OFF | PALM 2s black"
+
+PEN_TOGGLE_HOLD = 0.5   # seconds the two-finger pose must be held
+PEN_TOGGLE_COOLDOWN = 1.5
 
 
 def load_config():
@@ -192,9 +203,18 @@ def calibrate():
 
     # Thresholds: ON at 1/3 of the way from closed to open, OFF at 2/3.
     span = open_d - closed_d
+    if span < 0.15:
+        print(f"[WARN] Pinch and open hand look too similar (span {span:.2f}). "
+              "Calibration saved, but if pinch misbehaves: improve lighting, "
+              "face the camera, and recalibrate.")
+
+    # Clamp to sane ranges so a bad calibration can never lock the app
+    # into permanent pinching (thresholds outside these bounds are noise).
+    pinch_on = min(max(closed_d + 0.33 * span, 0.15), 0.45)
+    pinch_off = min(max(closed_d + 0.66 * span, pinch_on + 0.12), 0.75)
     cfg = {
-        "pinch_on": round(closed_d + 0.33 * span, 3),
-        "pinch_off": round(closed_d + 0.66 * span, 3),
+        "pinch_on": round(pinch_on, 3),
+        "pinch_off": round(pinch_off, 3),
         # Trigger at 60% of the user's average swipe peak
         "swipe_speed": round(0.6 * (sum(swipe_peaks) / len(swipe_peaks)), 3),
     }
@@ -213,9 +233,12 @@ def present(cfg):
                              swipe_speed=cfg["swipe_speed"])
     screen_w, screen_h = pyautogui.size()
     drawing = False
+    pen_mode = False
+    two_finger_start = None
+    last_pen_toggle = 0.0
     flash_msg, flash_until = "", 0.0
 
-    print("Presenter running. " + HINTS + "  |  Q to quit.")
+    print("Presenter running. Two fingers (peace sign) 0.5s toggles pen mode. Q to quit.")
 
     while True:
         ok, frame = cap.read()
@@ -246,18 +269,35 @@ def present(cfg):
                 ny = min(max((py - y0) / (y1 - y0), 0.0), 1.0)
                 pyautogui.moveTo(int(nx * (screen_w - 1)), int(ny * (screen_h - 1)))
 
+            # --- Pen mode toggle: two fingers (peace sign) held 0.5s ---
+            now = time.time()
+            if state.fingers_up == 2 and not state.pinching:
+                if two_finger_start is None:
+                    two_finger_start = now
+                elif (now - two_finger_start >= PEN_TOGGLE_HOLD
+                        and now - last_pen_toggle >= PEN_TOGGLE_COOLDOWN):
+                    pen_mode = not pen_mode
+                    last_pen_toggle = now
+                    two_finger_start = None
+                    if not pen_mode and drawing:  # releases a stuck marker
+                        pyautogui.mouseUp(); drawing = False
+                    flash_msg = "PEN ON - pinch to draw" if pen_mode else "PEN OFF - swipe to navigate"
+                    flash_until = now + 1.5
+            else:
+                two_finger_start = None
+
             for ev in events:
-                if ev.name == "PINCH_START" and not drawing:
+                if ev.name == "PINCH_START" and pen_mode and not drawing:
                     pyautogui.mouseDown(); drawing = True
                 elif ev.name == "PINCH_END" and drawing:
                     pyautogui.mouseUp(); drawing = False
-                elif ev.name == "SWIPE_RIGHT":
+                elif ev.name == "SWIPE_RIGHT" and not pen_mode:
                     pyautogui.press("right"); flash_msg = "NEXT slide"
                     flash_until = time.time() + 1
-                elif ev.name == "SWIPE_LEFT":
+                elif ev.name == "SWIPE_LEFT" and not pen_mode:
                     pyautogui.press("left"); flash_msg = "PREVIOUS slide"
                     flash_until = time.time() + 1
-                elif ev.name == "FIST":
+                elif ev.name == "FIST" and pen_mode:
                     pyautogui.press("e"); flash_msg = "erase"
                     flash_until = time.time() + 1
                 elif ev.name == "PALM_HOLD":
@@ -269,10 +309,17 @@ def present(cfg):
         elif drawing:
             pyautogui.mouseUp(); drawing = False
 
-        lines = [HINTS]
+        # Big mode indicator + hints
+        h_frame, w_frame = frame.shape[:2]
+        mode_txt = "PEN ON" if pen_mode else "PEN OFF"
+        mode_col = (0, 0, 255) if pen_mode else (0, 200, 0)
+        lines = [HINTS_ON if pen_mode else HINTS_OFF]
         if time.time() < flash_until:
             lines.append(">> " + flash_msg)
         banner(frame, lines)
+        cv2.rectangle(frame, (w_frame - 170, 10), (w_frame - 10, 55), mode_col, -1)
+        cv2.putText(frame, mode_txt, (w_frame - 158, 42),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
         cv2.imshow("Hand Presenter", frame)
         if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q'), 27):
