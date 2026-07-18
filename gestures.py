@@ -81,18 +81,25 @@ def _dist(a, b):
     return math.hypot(a.x - b.x, a.y - b.y)
 
 
+PINKY_MCP = 17
+
+
 def count_fingers_up(lm, handedness_label):
-    """Same simple finger counting as hand_tracking.py."""
+    """Rotation-invariant finger counting.
+
+    A finger is 'up' (extended) when its TIP is farther from the wrist than
+    its PIP joint. Unlike comparing y coordinates, this works when the hand
+    is tilted sideways — which happens naturally during swipes.
+    """
+    wrist = lm[WRIST]
     up = 0
     for tip_id in [INDEX_TIP, MIDDLE_TIP, RING_TIP, PINKY_TIP]:
-        if lm[tip_id].y < lm[tip_id - 2].y:
+        if _dist(lm[tip_id], wrist) > _dist(lm[tip_id - 2], wrist):
             up += 1
-    if handedness_label == "Right":
-        if lm[THUMB_TIP].x < lm[THUMB_TIP - 1].x:
-            up += 1
-    else:
-        if lm[THUMB_TIP].x > lm[THUMB_TIP - 1].x:
-            up += 1
+    # Thumb: extended when its tip is farther from the pinky base than its
+    # joint is (works for both hands, any rotation).
+    if _dist(lm[THUMB_TIP], lm[PINKY_MCP]) > _dist(lm[THUMB_TIP - 1], lm[PINKY_MCP]):
+        up += 1
     return up
 
 
@@ -154,7 +161,7 @@ class GestureTracker:
         new_pose = ""
         if st.fingers_up == 0 and not st.pinching:
             new_pose = "FIST"
-        elif st.fingers_up == 5:
+        elif st.fingers_up >= 4:
             new_pose = "OPEN_PALM"
         if new_pose and new_pose != st.pose:
             events.append(GestureEvent(new_pose, handedness_label, px, py))

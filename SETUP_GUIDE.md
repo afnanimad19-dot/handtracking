@@ -84,6 +84,7 @@ It saves `config.json` automatically.
 | Pinch flickers / won't trigger | Re-run `--calibrate` in current lighting |
 | Stuck drawing red ink | Hold two fingers 0.5s → PEN OFF releases the marker instantly |
 | Swipes fire by accident | Re-calibrate with faster deliberate swipes (raises the threshold) |
+| Swipe won't fire | Read the numbers at the bottom of the camera window: `fingers` must be 3+ (text turns green) and `speed` must pass the `/` number during the swipe. If speed never reaches it, lower `swipe_speed` in config.json or re-calibrate |
 | Cursor jittery | More light on your hand; keep hand inside the yellow box |
 | Keys don't reach the browser | Click the slide page once before presenting |
 | Everything went crazy | Slam real mouse to top-left corner = emergency stop |

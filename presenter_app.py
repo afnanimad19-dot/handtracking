@@ -216,7 +216,10 @@ def calibrate():
         "pinch_on": round(pinch_on, 3),
         "pinch_off": round(pinch_off, 3),
         # Trigger at 60% of the user's average swipe peak
-        "swipe_speed": round(0.6 * (sum(swipe_peaks) / len(swipe_peaks)), 3),
+        # 60% of the user's average swipe peak, clamped so the threshold
+        # is always reachable in normal use
+        "swipe_speed": round(min(max(0.6 * (sum(swipe_peaks) / len(swipe_peaks)),
+                                     0.5), 1.8), 3),
     }
     save_config(cfg)
     print("Calibration done. Run 'python presenter_app.py' to present.")
@@ -287,7 +290,10 @@ def present(cfg):
                 two_finger_start = None
 
             for ev in events:
-                if ev.name == "PINCH_START" and pen_mode and not drawing:
+                if ev.name == "PINCH_START" and not pen_mode:
+                    flash_msg = "PEN is OFF - hold 2 fingers 0.5s to enable drawing"
+                    flash_until = time.time() + 1.5
+                elif ev.name == "PINCH_START" and pen_mode and not drawing:
                     pyautogui.mouseDown(); drawing = True
                 elif ev.name == "PINCH_END" and drawing:
                     pyautogui.mouseUp(); drawing = False
@@ -306,6 +312,17 @@ def present(cfg):
 
             cv2.circle(frame, (px, py), 10,
                        (0, 255, 255) if drawing else (0, 0, 255), -1)
+
+            # Live readout: WHY a gesture does / doesn't fire
+            speed = abs(state.last_vx)
+            need = cfg["swipe_speed"]
+            dbg = (f"fingers:{state.fingers_up}  "
+                   f"speed:{speed:.2f}/{need:.2f}  "
+                   f"pinch:{state.last_pinch_dist:.2f} "
+                   f"(on<{cfg['pinch_on']:.2f} off>{cfg['pinch_off']:.2f})")
+            cv2.putText(frame, dbg, (10, h - 12),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                        (0, 255, 0) if state.fingers_up >= 3 else (0, 180, 255), 2)
         elif drawing:
             pyautogui.mouseUp(); drawing = False
 
