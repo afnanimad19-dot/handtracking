@@ -13,6 +13,8 @@ for the full business research report.
 | `gestures.py` | Gesture engine: emits `PINCH_START/MOVE/END`, `SWIPE_LEFT/RIGHT`, `FIST`, `OPEN_PALM` events |
 | `demo_virtual_objects.py` | Pinch to grab, drag and drop cards on screen (mini CRM board demo) |
 | `demo_mouse_control.py` | Your hand controls the real mouse — click, drag, and swipe slides in any app |
+| `demo_presenter.py` | Basic hand-only presentation control (swipe/point/draw/erase) |
+| `presenter_app.py` | **The product**: presenter with calibration wizard (`--calibrate`), saved per-room config, gesture hint bar, black-screen gesture |
 
 ## Setup
 

@@ -68,6 +68,11 @@ class HandState:
     last_t: float = None
     last_swipe_t: float = 0.0
     last_pinch_end_t: float = 0.0
+    palm_hold_start: float = None
+    palm_hold_fired: bool = False
+    # Raw measurements exposed for the calibration wizard
+    last_pinch_dist: float = 999.0
+    last_vx: float = 0.0
     fingers_up: int = 0
     pose: str = ""     # "FIST", "OPEN_PALM", or ""
 
@@ -91,10 +96,21 @@ def count_fingers_up(lm, handedness_label):
     return up
 
 
-class GestureTracker:
-    """Tracks gesture state per hand ("Left"/"Right") and emits events."""
+PALM_HOLD_SECONDS = 2.0  # hold an open palm this long to fire PALM_HOLD
 
-    def __init__(self):
+
+class GestureTracker:
+    """Tracks gesture state per hand ("Left"/"Right") and emits events.
+
+    Thresholds can be overridden per install (see presenter_app.py's
+    calibration wizard): GestureTracker(pinch_on=0.3, swipe_speed=1.2)
+    """
+
+    def __init__(self, pinch_on=PINCH_ON, pinch_off=PINCH_OFF,
+                 swipe_speed=SWIPE_SPEED):
+        self.pinch_on = pinch_on
+        self.pinch_off = pinch_off
+        self.swipe_speed = swipe_speed
         self.hands = {"Left": HandState(), "Right": HandState()}
 
     def update(self, hand_landmarks, handedness_label, frame_w, frame_h):
@@ -114,6 +130,7 @@ class GestureTracker:
         if hand_size < 1e-6:
             return events, st
         pinch_dist = _dist(lm[THUMB_TIP], lm[INDEX_TIP]) / hand_size
+        st.last_pinch_dist = pinch_dist
 
         # --- Cursor point: midpoint of thumb & index while pinching,
         #     index fingertip otherwise ---
@@ -143,11 +160,23 @@ class GestureTracker:
             events.append(GestureEvent(new_pose, handedness_label, px, py))
         st.pose = new_pose
 
+        # --- PALM_HOLD: open palm held steady for PALM_HOLD_SECONDS ---
+        if st.pose == "OPEN_PALM":
+            if st.palm_hold_start is None:
+                st.palm_hold_start = now
+            elif (not st.palm_hold_fired
+                    and now - st.palm_hold_start >= PALM_HOLD_SECONDS):
+                events.append(GestureEvent("PALM_HOLD", handedness_label, px, py))
+                st.palm_hold_fired = True
+        else:
+            st.palm_hold_start = None
+            st.palm_hold_fired = False
+
         # --- Pinch state machine with hysteresis ---
-        if not st.pinching and pinch_dist < PINCH_ON:
+        if not st.pinching and pinch_dist < self.pinch_on:
             st.pinching = True
             events.append(GestureEvent("PINCH_START", handedness_label, px, py))
-        elif st.pinching and pinch_dist > PINCH_OFF:
+        elif st.pinching and pinch_dist > self.pinch_off:
             st.pinching = False
             st.last_pinch_end_t = now
             events.append(GestureEvent("PINCH_END", handedness_label, px, py))
@@ -159,8 +188,9 @@ class GestureTracker:
             dt = now - st.last_t
             if dt > 0:
                 vx = (st.smooth_x - st.last_x) / dt  # frame-widths per second
+                st.last_vx = vx
                 if (st.fingers_up >= 4 and not st.pinching
-                        and abs(vx) > SWIPE_SPEED
+                        and abs(vx) > self.swipe_speed
                         and now - st.last_swipe_t > SWIPE_COOLDOWN
                         and now - st.last_pinch_end_t > SWIPE_COOLDOWN):
                     name = "SWIPE_RIGHT" if vx > 0 else "SWIPE_LEFT"
