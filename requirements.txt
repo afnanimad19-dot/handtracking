@@ -1,3 +1,7 @@
-opencv-python>=4.8
-mediapipe>=0.10
+# Versions verified working together (numpy 1.26 / opencv 4.11 / mediapipe 0.10.21)
+# Pinned: mediapipe 0.10.26+ removed the mp.solutions API this project uses.
+# mediapipe 0.10.21 needs Python 3.9-3.12.
+mediapipe==0.10.21
+opencv-python>=4.8,<5
 pyautogui>=0.9.54
+numpy>=1.26,<2

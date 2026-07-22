@@ -310,8 +310,21 @@ def present(cfg):
                     pyautogui.press("b"); flash_msg = "black screen"
                     flash_until = time.time() + 1
 
-            cv2.circle(frame, (px, py), 10,
-                       (0, 255, 255) if drawing else (0, 0, 255), -1)
+            # Cursor / pen visuals
+            if pen_mode:
+                # Dots on thumb tip and index tip; the white dot between
+                # them is the pen point — touch the two dots together to ink.
+                lm = hand_landmarks.landmark
+                tx, ty = int(lm[4].x * w), int(lm[4].y * h)
+                ix, iy = int(lm[8].x * w), int(lm[8].y * h)
+                col = (0, 0, 255) if drawing else (0, 255, 255)
+                cv2.circle(frame, (tx, ty), 9, col, -1)
+                cv2.circle(frame, (ix, iy), 9, col, -1)
+                cv2.line(frame, (tx, ty), (ix, iy), col, 2)
+                cv2.circle(frame, ((tx + ix) // 2, (ty + iy) // 2), 5,
+                           (255, 255, 255), -1)
+            else:
+                cv2.circle(frame, (px, py), 10, (0, 0, 255), -1)
 
             # Live readout: WHY a gesture does / doesn't fire
             speed = abs(state.last_vx)

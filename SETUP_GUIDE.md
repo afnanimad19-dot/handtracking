@@ -80,6 +80,7 @@ It saves `config.json` automatically.
 |---|---|
 | `pip` not recognized | Reinstall Python with "Add to PATH" ticked |
 | mediapipe install fails | Your Python is 3.13+ — install 3.12 |
+| `module 'mediapipe' has no attribute 'solutions'` | You have a too-new mediapipe. Run: `python -m pip install "mediapipe==0.10.21"` |
 | Wrong camera opens | Run `check_camera.py`, set `CAMERA_INDEX` |
 | Pinch flickers / won't trigger | Re-run `--calibrate` in current lighting |
 | Stuck drawing red ink | Hold two fingers 0.5s → PEN OFF releases the marker instantly |
