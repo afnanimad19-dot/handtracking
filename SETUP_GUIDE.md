@@ -25,7 +25,7 @@ GitHub (Code → Download ZIP) and extract to e.g. `F:\hand-tracking`.
 Then in Command Prompt:
 ```
 cd F:\hand-tracking
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 (This installs opencv-python, mediapipe, pyautogui. Takes a few minutes.)
 
