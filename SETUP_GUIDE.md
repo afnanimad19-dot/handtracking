@@ -69,8 +69,11 @@ It saves `config.json` automatically.
      ERASE box** → circle gone.
    - Hover **PEN** again → PEN OFF → flick to slide 3
    - Slide 3: pen on, write your name, pen off
-   - **Open palm 2s** — screen goes black; again — it comes back
    - **Q** in the camera window quits
+
+   (The open-palm-2s black-screen gesture is OFF by default because it
+   fired by accident. To enable: set `"palm_black_screen": true` in
+   config.json.)
 
 ## Step 6 — When you DO present for real
 - PowerPoint: start slideshow, press **Ctrl+P** once (pen mode) so

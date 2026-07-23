@@ -103,7 +103,11 @@ class DwellButton:
 
 
 def load_config():
-    cfg = {"pinch_on": PINCH_ON, "pinch_off": PINCH_OFF, "swipe_speed": SWIPE_SPEED}
+    # palm_black_screen: the open-palm-2s black screen gesture fired by
+    # accident in the field, so it ships disabled. Re-enable by setting
+    # "palm_black_screen": true in config.json.
+    cfg = {"pinch_on": PINCH_ON, "pinch_off": PINCH_OFF,
+           "swipe_speed": SWIPE_SPEED, "palm_black_screen": False}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE) as f:
@@ -350,7 +354,7 @@ def present(cfg):
                 elif ev.name == "FIST" and pen_mode:
                     pyautogui.press("e"); flash_msg = "erase"
                     flash_until = time.time() + 1
-                elif ev.name == "PALM_HOLD":
+                elif ev.name == "PALM_HOLD" and cfg.get("palm_black_screen"):
                     pyautogui.press("b"); flash_msg = "black screen"
                     flash_until = time.time() + 1
 
