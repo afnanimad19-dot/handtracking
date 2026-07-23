@@ -9,19 +9,19 @@ What it adds over demo_presenter.py:
   * On-screen gesture hint bar (clients trust what they can read)
   * PALM HOLD (open hand steady 2s) -> black screen toggle ('B' in PowerPoint)
 
-Two clear modes, toggled by holding up TWO FINGERS (peace sign) for half a
-second — a big indicator on screen shows which mode you're in:
+Controls are built on the two RELIABLE signals — hand position and hand
+speed. No finger counting in the critical path.
 
   PEN OFF (default — navigate):
-    open-hand swipe   next / previous slide
-    point (1 finger)  pointer follows your finger
-    pinch             does NOTHING (so you can't draw by accident)
+    move your hand      pointer follows it
+    fast flick L/R      previous / next slide (any finger pose)
+    hover the PEN box   ~1s (it fills up) -> pen ON
   PEN ON (annotate):
-    pinch + move      draw on the slide (PowerPoint: Ctrl+P once for pen mode)
-    fist              erase drawings ('E')
-    swiping           disabled (so you can't change slides mid-drawing)
+    pinch + move        draw (dots show thumb+index; touching them inks)
+    hover ERASE box     ~1s -> erase drawings ('E')
+    hover PEN box       ~1s -> pen OFF;   flicking is disabled while pen is ON
   Both modes:
-    palm hold 2s      black screen on/off ('B')
+    open palm held 2s   black screen on/off ('B')
 
 Run:
   python presenter_app.py --calibrate    # first time in a new room
@@ -55,11 +55,51 @@ mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_styles = mp.solutions.drawing_styles
 
-HINTS_OFF = "SWIPE slides | POINT pointer | 2 FINGERS 0.5s = pen ON | PALM 2s black"
-HINTS_ON = "PINCH draw | FIST erase | 2 FINGERS 0.5s = pen OFF | PALM 2s black"
+HINTS_OFF = "FLICK left/right = change slide | hover PEN box = drawing mode"
+HINTS_ON = "PINCH = draw | hover ERASE = clear ink | hover PEN = exit drawing"
 
-PEN_TOGGLE_HOLD = 0.5   # seconds the two-finger pose must be held
-PEN_TOGGLE_COOLDOWN = 1.5
+
+class DwellButton:
+    """A screen zone that fires when the hand hovers inside it for `dwell`
+    seconds. Pure position — immune to finger-count noise."""
+
+    def __init__(self, label, rect, dwell=0.9, cooldown=1.5):
+        self.label = label
+        self.rect = rect              # (x0, y0, x1, y1) in frame pixels
+        self.dwell = dwell
+        self.cooldown = cooldown
+        self.enter_t = None
+        self.last_fire = 0.0
+        self.progress = 0.0
+
+    def update(self, px, py, now):
+        x0, y0, x1, y1 = self.rect
+        if x0 <= px <= x1 and y0 <= py <= y1:
+            if self.enter_t is None:
+                self.enter_t = now
+            self.progress = min(1.0, (now - self.enter_t) / self.dwell)
+            if self.progress >= 1.0 and now - self.last_fire > self.cooldown:
+                self.last_fire = now
+                self.enter_t = None
+                self.progress = 0.0
+                return True
+        else:
+            self.enter_t = None
+            self.progress = 0.0
+        return False
+
+    def draw(self, frame, highlight=False):
+        import cv2 as _cv2
+        x0, y0, x1, y1 = self.rect
+        base = (60, 60, 60)
+        _cv2.rectangle(frame, (x0, y0), (x1, y1), base, -1)
+        if self.progress > 0:  # fill left-to-right as the dwell charges
+            fill_w = int((x1 - x0) * self.progress)
+            _cv2.rectangle(frame, (x0, y0), (x0 + fill_w, y1), (0, 180, 255), -1)
+        border = (0, 255, 255) if highlight else (200, 200, 200)
+        _cv2.rectangle(frame, (x0, y0), (x1, y1), border, 2)
+        _cv2.putText(frame, self.label, (x0 + 12, (y0 + y1) // 2 + 8),
+                     _cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
 
 
 def load_config():
@@ -237,11 +277,10 @@ def present(cfg):
     screen_w, screen_h = pyautogui.size()
     drawing = False
     pen_mode = False
-    two_finger_start = None
-    last_pen_toggle = 0.0
     flash_msg, flash_until = "", 0.0
+    pen_btn = erase_btn = None  # created once frame size is known
 
-    print("Presenter running. Two fingers (peace sign) 0.5s toggles pen mode. Q to quit.")
+    print("Presenter running. Hover the PEN box to toggle drawing. Q to quit.")
 
     while True:
         ok, frame = cap.read()
@@ -250,6 +289,10 @@ def present(cfg):
         if FLIP_CAMERA:
             frame = cv2.flip(frame, 1)
         h, w = frame.shape[:2]
+        if pen_btn is None:
+            btn_w, btn_h = int(w * 0.22), int(h * 0.12)
+            pen_btn = DwellButton("PEN", (10, 70, 10 + btn_w, 70 + btn_h))
+            erase_btn = DwellButton("ERASE", (10, 80 + btn_h, 10 + btn_w, 80 + 2 * btn_h))
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb)
 
@@ -265,33 +308,34 @@ def present(cfg):
             px = int(state.smooth_x * w)
             py = int(state.smooth_y * h)
 
-            if drawing or state.fingers_up <= 2:
-                x0, x1 = FRAME_MARGIN * w, (1 - FRAME_MARGIN) * w
-                y0, y1 = FRAME_MARGIN * h, (1 - FRAME_MARGIN) * h
-                nx = min(max((px - x0) / (x1 - x0), 0.0), 1.0)
-                ny = min(max((py - y0) / (y1 - y0), 0.0), 1.0)
-                pyautogui.moveTo(int(nx * (screen_w - 1)), int(ny * (screen_h - 1)))
+            # Pointer always follows the hand (no finger-count gate — that
+            # gate froze the cursor whenever counting glitched).
+            x0, x1 = FRAME_MARGIN * w, (1 - FRAME_MARGIN) * w
+            y0, y1 = FRAME_MARGIN * h, (1 - FRAME_MARGIN) * h
+            nx = min(max((px - x0) / (x1 - x0), 0.0), 1.0)
+            ny = min(max((py - y0) / (y1 - y0), 0.0), 1.0)
+            # Clamp 1px inside edges so pyautogui's corner failsafe can't
+            # trip while hovering the on-screen buttons.
+            pyautogui.moveTo(min(max(int(nx * (screen_w - 1)), 1), screen_w - 2),
+                             min(max(int(ny * (screen_h - 1)), 1), screen_h - 2))
 
-            # --- Pen mode toggle: two fingers (peace sign) held 0.5s ---
+            # --- Hover buttons (position-based, immune to finger miscounts) ---
             now = time.time()
-            if state.fingers_up == 2 and not state.pinching:
-                if two_finger_start is None:
-                    two_finger_start = now
-                elif (now - two_finger_start >= PEN_TOGGLE_HOLD
-                        and now - last_pen_toggle >= PEN_TOGGLE_COOLDOWN):
-                    pen_mode = not pen_mode
-                    last_pen_toggle = now
-                    two_finger_start = None
-                    if not pen_mode and drawing:  # releases a stuck marker
-                        pyautogui.mouseUp(); drawing = False
-                    flash_msg = "PEN ON - pinch to draw" if pen_mode else "PEN OFF - swipe to navigate"
-                    flash_until = now + 1.5
-            else:
-                two_finger_start = None
+            if pen_btn.update(px, py, now):
+                pen_mode = not pen_mode
+                if not pen_mode and drawing:  # releases a stuck marker
+                    pyautogui.mouseUp(); drawing = False
+                flash_msg = ("PEN ON - pinch (thumb+index dots) to draw"
+                             if pen_mode else "PEN OFF - flick to change slides")
+                flash_until = now + 1.5
+            if pen_mode and erase_btn.update(px, py, now):
+                pyautogui.press("e")
+                flash_msg = "erased"
+                flash_until = now + 1.0
 
             for ev in events:
                 if ev.name == "PINCH_START" and not pen_mode:
-                    flash_msg = "PEN is OFF - hold 2 fingers 0.5s to enable drawing"
+                    flash_msg = "PEN is OFF - hover the PEN box to draw"
                     flash_until = time.time() + 1.5
                 elif ev.name == "PINCH_START" and pen_mode and not drawing:
                     pyautogui.mouseDown(); drawing = True
@@ -350,6 +394,11 @@ def present(cfg):
         cv2.rectangle(frame, (w_frame - 170, 10), (w_frame - 10, 55), mode_col, -1)
         cv2.putText(frame, mode_txt, (w_frame - 158, 42),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
+        # Hover buttons on top of everything so they're always readable
+        pen_btn.draw(frame, highlight=pen_mode)
+        if pen_mode:
+            erase_btn.draw(frame)
 
         cv2.imshow("Hand Presenter", frame)
         if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q'), 27):

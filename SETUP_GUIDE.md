@@ -60,12 +60,15 @@ It saves `config.json` automatically.
    ```
 4. Now test, in this order. The app starts in **PEN OFF** (navigate) mode —
    the green/red box in the camera window always shows the current mode:
-   - **Swipe** open hand right → next slide
-   - Slide 1: **point** with your index finger — cursor follows it onto A, B, C
-   - Slide 2: hold up **two fingers (peace sign) for half a second** → PEN ON;
-     **pinch and move** — circle the buggy code line; **fist** — erased
-   - **Two fingers 0.5s** again → PEN OFF → swipe to slide 3
-   - Slide 3: pen on, pinch-write your name, pen off
+   - **Flick your hand fast to the right** (any finger pose, even one
+     finger) → next slide
+   - Slide 1: move your hand — the cursor follows it onto A, B, C
+   - Slide 2: **hover your hand over the PEN box** in the camera window
+     until it fills (~1s) → PEN ON. **Touch the thumb+index dots
+     together and move** — circle the buggy code line. **Hover the
+     ERASE box** → circle gone.
+   - Hover **PEN** again → PEN OFF → flick to slide 3
+   - Slide 3: pen on, write your name, pen off
    - **Open palm 2s** — screen goes black; again — it comes back
    - **Q** in the camera window quits
 
